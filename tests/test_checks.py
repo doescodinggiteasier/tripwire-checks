@@ -63,6 +63,13 @@ def test_negative_control_with_corruption(tmp_path):
     assert res["verdict"] == "VACUOUS"   # passes on the corrupted copy: it checks existence, not content
 
 
+def test_negative_control_include_copies_only_listed(tmp_path):
+    (tmp_path / "sub").mkdir(); (tmp_path / "sub" / "d.csv").write_text("x\n"); (tmp_path / "big.bin").write_text("y")
+    res = tw.negative_control("test -s sub/d.csv && test ! -e big.bin || test -e big.bin -a ! -s sub/d.csv", cwd=tmp_path,
+                              include=["sub/d.csv"], corrupt=lambda d: (d / "sub" / "d.csv").write_text(""))
+    assert res["controls"]["corrupted"] != 0
+
+
 # 3. receipts and lint
 def test_receipt_records_real_exit(tmp_path):
     rec = tw.run("exit 7", receipt_path=tmp_path / "r.json", cwd=tmp_path)

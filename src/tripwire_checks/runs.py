@@ -86,13 +86,14 @@ def run(cmd: str, *, cwd=None, inputs=(), receipt_path=None, timeout=None, shell
 
 
 # -- negative control ----------------------------------------------------------------------------
-def negative_control(cmd: str, *, cwd=None, corrupt=None, timeout=120, shell="/bin/bash") -> dict:
+def negative_control(cmd: str, *, cwd=None, corrupt=None, include=None, timeout=120, shell="/bin/bash") -> dict:
     """Run a check where it MUST fail, then where it should pass.
 
     1. In an empty temporary directory (absolute paths in `cmd` still resolve, so a check that
        reads only its own fixed inputs is caught by step 2 instead).
     2. If `corrupt` is given (a function that receives a temp copy of `cwd` and damages it), the
-       check is run against the corrupted copy.
+       check is run against the corrupted copy. `include` (relative paths) limits the copy to
+       what the check reads, for large working trees.
     3. In `cwd` itself.
 
     Verdict: VACUOUS if the check passed in any must-fail run; PASS if it failed there and passed
@@ -107,8 +108,13 @@ def negative_control(cmd: str, *, cwd=None, corrupt=None, timeout=120, shell="/b
     if corrupt is not None:
         import shutil
         with tempfile.TemporaryDirectory() as tmp:
-            dst = Path(tmp) / "copy"
-            shutil.copytree(cwd or os.getcwd(), dst, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+            src, dst = Path(cwd or os.getcwd()), Path(tmp) / "copy"
+            if include is None:
+                shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+            else:
+                for rel in include:
+                    (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (shutil.copytree if (src / rel).is_dir() else shutil.copy2)(src / rel, dst / rel)
             corrupt(dst)
             out["controls"]["corrupted"] = go(dst)
     out["real"] = go(cwd)
